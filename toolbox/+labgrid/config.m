@@ -6,6 +6,8 @@ classdef config
     %                                  from $LG_COORDINATOR (host:8000)
     %   labgrid.config.adiLgBin()      adi-lg executable ($LG_ADI_LG_BIN, default "adi-lg")
     %   labgrid.config.leaseEnvVars()  environment variables exported by `adi-lg request --run`
+    %   labgrid.config.home()          state directory ($LG_MATLAB_HOME, default ~/.labgrid-matlab)
+    %   labgrid.config.sessionsDir()   where labgrid.Session records live sessions
     %
     %   These names are the single source of truth for every env-var the toolbox reads or writes.
 
@@ -13,6 +15,7 @@ classdef config
         EnvCoordinator = "LG_COORDINATOR"
         EnvApi = "LG_API"
         EnvAdiLgBin = "LG_ADI_LG_BIN"
+        EnvHome = "LG_MATLAB_HOME"
         EnvIioUri = "IIO_URI"
         EnvPlace = "LG_PLACE"
         EnvCarrier = "LG_CARRIER"
@@ -47,6 +50,17 @@ classdef config
             if ~endsWith(url, "/api")
                 url = url + "/api";
             end
+        end
+
+        function h = home()
+            h = string(getenv(labgrid.config.EnvHome));
+            if strlength(h) == 0
+                h = fullfile(string(getenv("HOME")), ".labgrid-matlab");
+            end
+        end
+
+        function d = sessionsDir()
+            d = fullfile(labgrid.config.home(), "sessions");
         end
 
         function bin = adiLgBin()

@@ -4,7 +4,7 @@ classdef ConfigTest < matlab.unittest.TestCase
     methods (TestMethodSetup)
         function clearEnv(testCase)
             import matlab.unittest.fixtures.EnvironmentVariableFixture
-            for n = ["LG_COORDINATOR", "LG_API", "LG_ADI_LG_BIN"]
+            for n = ["LG_COORDINATOR", "LG_API", "LG_ADI_LG_BIN", "LG_MATLAB_HOME"]
                 testCase.applyFixture(EnvironmentVariableFixture(n, ""));
             end
         end
@@ -52,6 +52,16 @@ classdef ConfigTest < matlab.unittest.TestCase
         function adiLgBinHonoursOverride(testCase)
             setenv("LG_ADI_LG_BIN", "/opt/venv/bin/adi-lg");
             testCase.verifyEqual(labgrid.config.adiLgBin(), "/opt/venv/bin/adi-lg");
+        end
+
+        function homeDefaultsUnderUserHome(testCase)
+            testCase.verifyEqual(labgrid.config.home(), fullfile(string(getenv("HOME")), ".labgrid-matlab"));
+        end
+
+        function homeHonoursOverride(testCase)
+            setenv("LG_MATLAB_HOME", "/tmp/lgm");
+            testCase.verifyEqual(labgrid.config.home(), "/tmp/lgm");
+            testCase.verifyEqual(labgrid.config.sessionsDir(), fullfile("/tmp/lgm", "sessions"));
         end
 
         function envVarNamesAreCentralised(testCase)
