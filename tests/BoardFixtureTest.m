@@ -1,7 +1,85 @@
 classdef BoardFixtureTest < matlab.unittest.TestCase
     % labgrid.fixtures.BoardFixture — environment hand-over path (adi-lg request --run).
 
+    methods (Access = private)
+        function useShim(testCase)
+            % Route the fixture's interactive path through the fake adi-lg.
+            import matlab.unittest.fixtures.EnvironmentVariableFixture
+            import matlab.unittest.fixtures.TemporaryFolderFixture
+            testCase.assumeTrue(isunix, "bash only");
+            dir = string(testCase.applyFixture(TemporaryFolderFixture).Folder);
+            shim = fullfile(helpers.repoRoot(), "tests", "+fakes", "bin", "adi-lg");
+            helpers.withLeaseEnv(testCase);
+            testCase.applyFixture(EnvironmentVariableFixture("LG_ADI_LG_BIN", shim));
+            testCase.applyFixture(EnvironmentVariableFixture("LG_MATLAB_HOME", fullfile(dir, "home")));
+            testCase.applyFixture(EnvironmentVariableFixture("LG_COORDINATOR", "coord:20408"));
+            for n = ["FAKE_ADI_LG_EXIT", "FAKE_ADI_LG_DELAY", "FAKE_ADI_LG_URI", "FAKE_ADI_LG_PLACE", "FAKE_ADI_LG_CARRIER"]
+                testCase.applyFixture(EnvironmentVariableFixture(n, ""));
+            end
+            testCase.applyFixture(EnvironmentVariableFixture("FAKE_ADI_LG_LOG", fullfile(dir, "calls.log")));
+        end
+
+        function n = shimProcesses(~)
+            [~, out] = system("pgrep -f 'adi-lg reques[t] --part' | wc -l");
+            n = str2double(strtrim(out));
+        end
+    end
+
     methods (Test)
+        % --- interactive (session) path ----------------------------------------------
+        function sessionPathAcquiresBootsAndReleases(testCase)
+            testCase.useShim();
+            setenv("FAKE_ADI_LG_URI", "ip:10.0.0.132");
+            results = runtests("helpers.BoardConsumerTests");
+            testCase.verifyTrue(all([results.Passed]), "consumers should run against the session lease");
+            testCase.verifySubstring(string(fileread(getenv("FAKE_ADI_LG_LOG"))), "request --part adrv9371");
+            testCase.verifyTrue(helpers.waitUntil(@() testCase.shimProcesses() == 0, 10), "board must be released after the suite");
+            testCase.verifyEqual(string(getenv("IIO_URI")), "", "env must be restored");
+            testCase.verifyEmpty(dir(fullfile(labgrid.config.sessionsDir(), "*.json")), "session record must be removed");
+        end
+
+        function sessionPathBoardBusyMarksTestsIncomplete(testCase)
+            testCase.useShim();
+            setenv("FAKE_ADI_LG_EXIT", "11");
+            results = runtests("helpers.BoardConsumerTests");
+            testCase.verifyTrue(all([results.Incomplete]));
+            testCase.verifyFalse(any([results.Failed]));
+        end
+
+        function sessionPathNoMatchingBoardIsRed(testCase)
+            testCase.useShim();
+            setenv("FAKE_ADI_LG_EXIT", "10");
+            results = runtests("helpers.BoardConsumerTests");
+            testCase.verifyTrue(all([results.Failed]));
+        end
+
+        function sessionPathBootFailureIsRed(testCase)
+            testCase.useShim();
+            setenv("FAKE_ADI_LG_EXIT", "12");
+            results = runtests("helpers.BoardConsumerTests");
+            testCase.verifyTrue(all([results.Failed]));
+        end
+
+        function twoBoardsInOneSuiteAreAcquiredOneAfterTheOther(testCase)
+            testCase.useShim();
+            setenv("FAKE_ADI_LG_URI", "ip:10.0.0.132");
+            results = runtests(["helpers.BoardConsumerTests", "helpers.OtherBoardConsumerTests"]);
+            testCase.verifyTrue(all([results.Passed]));
+            log = string(fileread(getenv("FAKE_ADI_LG_LOG")));
+            testCase.verifySubstring(log, "request --part adrv9371");
+            testCase.verifySubstring(log, "request --part ad9081 --carrier zcu102");
+            testCase.verifyTrue(helpers.waitUntil(@() testCase.shimProcesses() == 0, 10), "both boards released");
+        end
+
+        function fixtureOptionsAreForwardedToAdiLg(testCase)
+            testCase.useShim();
+            results = runtests("helpers.OptionsBoardConsumerTests");
+            testCase.verifyTrue(all([results.Passed]));
+            testCase.verifySubstring(string(fileread(getenv("FAKE_ADI_LG_LOG"))), ...
+                "request --part daq3 --carrier vcu118 --wait 7 --power-down");
+        end
+
+        % --- environment hand-over path ------------------------------------------------
         function envLeaseIsUsedAndExportedToConsumers(testCase)
             helpers.withLeaseEnv(testCase, "IIO_URI", "ip:10.0.0.132", "LG_PLACE", "bq", ...
                 "LG_CARRIER", "zc706", "HW_DAUGHTER", "adrv9371");
