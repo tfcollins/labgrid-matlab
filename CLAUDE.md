@@ -17,7 +17,9 @@ labgrid coordinator. Design spec: `docs/superpowers/specs/2026-11-09-labgrid-mat
 - `matlab -batch "buildtool test"` — unit tests only (tag `live` excluded). Fake `adi-lg` shim lives in
   `tests/+fakes/bin/`.
 - `matlab -batch "buildtool testLive"` — needs coordinator `10.0.0.41` and a free board. Long; use the
-  watch-build skill, never foreground polling.
+  watch-build skill, never foreground polling. On nemo use the CI venv's CLI, which matches the
+  exporters: `LG_COORDINATOR=10.0.0.41:20408 LG_ADI_LG_BIN=$HOME/.cache/matlab-hw-request/venv/bin/adi-lg
+  LG_TEST_PART=adrv9009` (the stale `~/.local/bin/adi-lg`, labgrid 25.0.1, cannot boot the current rigs).
 - No licensed MATLAB on this workstation: `scripts/remote-matlab-test.sh [task]` rsyncs the repo to
   nemo (`/mnt/onetb/scratch/labgrid-matlab`) and runs `buildtool` there with
   `/mnt/onetb/MATLAB/R2025b/bin/matlab`.
