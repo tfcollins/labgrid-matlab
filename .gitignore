@@ -1,0 +1,18 @@
+# MATLAB
+*.asv
+*.mex*
+*.mlappinstall
+slprj/
+# Build / packaging outputs
+releases/
+*.mltbx
+# Test scratch
+tests/tmp/
+*_HWTestResults.xml
+labgrid-junit.xml
+labgrid-summary.json
+# Superpowers scratch workspace
+.superpowers/
+# Editors
+.vscode/
+.idea/
