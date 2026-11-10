@@ -102,6 +102,17 @@ releases the coordinator reservation. The CLI is launched with `env -u LD_LIBRAR
 Python stack does not pick up MATLAB's bundled libraries. Linux/macOS only; on Windows use the
 CI form. `runInParallel` is not supported (each worker would request its own board).
 
+## Verified
+
+2026-11-09, MATLAB R2025b on lab host nemo against coordinator 10.0.0.41 (labgrid-plugins at
+3bfc181, labgrid 26.0.1): `buildtool test` 105/105 (no hardware); `buildtool testLive` booted
+place `nemo` (adrv9009 on zc706, BootFPGASoCTFTP) through `labgrid.Session.request` and again
+through `labgrid.fixtures.BoardFixture`, reached iiod at `ip:10.0.3.1:30431`, and released the
+place on the coordinator both times. Note: the `adi-lg` used must be at least as new as the
+lab's exporters (older venvs failed with "'XilinxDeviceJTAGAttributes' object has no attribute
+'serial'", which surfaces as `labgrid:provisionFailed` with the log tail, and the place is still
+released).
+
 ## Development
 
 ```bash
@@ -111,8 +122,10 @@ matlab -batch "buildtool package"    # releases/labgrid-matlab.mltbx
 scripts/remote-matlab-test.sh test   # same, on a lab host with a licensed MATLAB (see the script)
 ```
 
-See `examples/` for a minimal consumer and `examples/migrate-transceiver-toolbox.md` for the
-one-line migration of existing ADI toolbox test suites. Design notes:
+Documentation: [`docs/`](docs/index.md) (getting started, writing tests, CI integration,
+interactive sessions, API reference, troubleshooting; `mkdocs serve` renders it). Also
+`examples/` for a minimal consumer, `examples/migrate-transceiver-toolbox.md` for the one-line
+migration of existing ADI toolbox test suites, and the design notes in
 `docs/superpowers/specs/2026-11-09-labgrid-matlab-design.md`.
 
 License: Apache-2.0.
