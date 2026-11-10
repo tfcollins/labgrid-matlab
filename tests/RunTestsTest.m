@@ -147,6 +147,16 @@ classdef RunTestsTest < matlab.unittest.TestCase
                 "labgrid:emptySelection");
         end
 
+        function extraPluginsAreAddedToTheRunner(testCase)
+            import matlab.automation.streams.ToFile
+            helpers.withLeaseEnv(testCase);
+            out = fullfile(testCase.Dir, "plugin.txt");
+            results = labgrid.runTests("helpers.PlainTests", Plugins={helpers.MarkerPlugin(ToFile(out))}, ...
+                JUnit=fullfile(testCase.Dir, "j.xml"), Summary=fullfile(testCase.Dir, "s.json"), Verbosity=0);
+            testCase.verifyNumElements(results, 2);
+            testCase.verifySubstring(string(fileread(out)), "MarkerPlugin saw helpers.PlainTests/passes");
+        end
+
         % --- basics --------------------------------------------------------------------
         function writesJUnitAndSummary(testCase)
             helpers.withLeaseEnv(testCase, "IIO_URI", "ip:10.0.0.132", "LG_PLACE", "bq", ...

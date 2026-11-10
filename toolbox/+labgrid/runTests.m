@@ -15,6 +15,7 @@ function results = runTests(target, opts)
 %            BoardFixtures need is live; drop the tests of boards that are not (default false).
 %            Dropped boards are listed under "skipped" in the summary JSON.
 %   Client   labgrid.Client to use for the availability check (default labgrid.Client()).
+%   Plugins  cell array of extra matlab.unittest.plugins.TestRunnerPlugin objects to add.
 %
 %   This function never calls exit(): MATLAB R2025b can crash in exit() after writing the JUnit
 %   file, so CI must read pass/fail from the JUnit XML or the summary JSON, not the exit code.
@@ -28,6 +29,7 @@ arguments
     opts.Verbosity (1,1) double = 2
     opts.FilterByAvailability (1,1) logical = false
     opts.Client = []
+    opts.Plugins (1,:) cell = {}
 end
 import matlab.unittest.TestRunner
 import matlab.unittest.plugins.XMLPlugin
@@ -84,6 +86,9 @@ end
 runner.addPlugin(labgrid.plugins.LabgridPlugin);
 runner.addPlugin(DiagnosticsValidationPlugin);
 runner.addPlugin(XMLPlugin.producingJUnitFormat(opts.JUnit));
+for k = 1:numel(opts.Plugins)
+    runner.addPlugin(opts.Plugins{k});
+end
 
 results = runner.run(suite);
 
