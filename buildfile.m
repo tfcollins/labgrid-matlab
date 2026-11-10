@@ -9,6 +9,7 @@ plan = buildplan(localfunctions);
 
 root = plan.RootFolder;
 addpath(fullfile(root, "toolbox"));  % TestTask SourceFiles is for coverage only; tests need the toolbox on the path
+addpath(fullfile(root, "tests"));    % +helpers package, shared by unit and live tests
 % Unit tests live directly in tests/; live (hardware) tests live in tests/live and are
 % excluded here by not recursing into subfolders.
 plan("test") = TestTask(fullfile(root, "tests"), ...

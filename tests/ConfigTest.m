@@ -64,6 +64,10 @@ classdef ConfigTest < matlab.unittest.TestCase
             testCase.verifyEqual(labgrid.config.sessionsDir(), fullfile("/tmp/lgm", "sessions"));
         end
 
+        function versionIsSemver(testCase)
+            testCase.verifyMatches(labgrid.internal.version(), "^\d+\.\d+\.\d+$");
+        end
+
         function envVarNamesAreCentralised(testCase)
             names = labgrid.config.leaseEnvVars();
             testCase.verifyEqual(names, ["IIO_URI", "LG_PLACE", "LG_CARRIER", "HW_DAUGHTER", "HW_CARRIER"]);

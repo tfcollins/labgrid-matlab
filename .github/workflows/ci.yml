@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      live:
+        description: "Also run the live coordinator/board tests"
+        type: boolean
+        default: false
+
+env:
+  MATLAB_BIN: ${{ vars.MATLAB_BIN || '/mnt/onetb/MATLAB/R2025b/bin/matlab' }}
+
+jobs:
+  unit:
+    name: Unit tests (no hardware)
+    runs-on: [self-hosted, hw-nemo]
+    steps:
+      - uses: actions/checkout@v4
+      - name: buildtool test
+        run: |
+          set -euo pipefail
+          "$MATLAB_BIN" -batch "buildtool test"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: unit-results
+          path: tests/tmp/unit-results.xml
+
+  live:
+    name: Live coordinator + board tests
+    if: github.event_name == 'workflow_dispatch' && inputs.live
+    needs: unit
+    runs-on: [self-hosted, hw-nemo]
+    env:
+      LG_COORDINATOR: ${{ vars.LG_COORDINATOR }}
+      LG_TEST_PART: ${{ vars.LG_TEST_PART || 'adrv9009' }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: buildtool testLive
+        run: |
+          set -euo pipefail
+          "$MATLAB_BIN" -batch "buildtool testLive"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: live-results
+          path: tests/tmp/live-results.xml
