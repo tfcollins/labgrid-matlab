@@ -5,7 +5,7 @@ import matlab.net.http.RequestMessage
 import matlab.net.http.HTTPOptions
 import matlab.net.http.MediaType
 opts = HTTPOptions(ConnectTimeout=timeout, ConvertResponse=false);
-req = RequestMessage("GET");
+req = RequestMessage(matlab.net.http.RequestMethod.GET);
 req = req.addFields(matlab.net.http.field.AcceptField(MediaType("application/json")));
 resp = req.send(matlab.net.URI(url), opts);
 status = double(resp.StatusCode);

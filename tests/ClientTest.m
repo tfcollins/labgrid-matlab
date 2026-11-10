@@ -2,7 +2,7 @@ classdef ClientTest < matlab.unittest.TestCase
     % labgrid.Client — read-only REST client for the coordinator dashboard API.
 
     properties (Constant)
-        Recorded = fullfile(fileparts(mfilename("fullpath")), "recorded")
+        Recorded = fullfile(helpers.repoRoot(), "tests", "recorded")
     end
 
     methods (Access = private)

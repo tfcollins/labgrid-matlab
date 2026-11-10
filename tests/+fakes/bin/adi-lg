@@ -1,0 +1,71 @@
+#!/usr/bin/env bash
+# Fake `adi-lg` for labgrid-matlab unit tests. Implements the `request` contract of
+# adi_lg_plugins/tools/request_cli.py without a coordinator or hardware:
+#   adi-lg request --part P [--carrier C] [--mode M] [--wait N] [--power-down] [--coord X] [--run CMD]
+# Knobs (environment):
+#   FAKE_ADI_LG_EXIT     non-empty -> exit with this code before any child runs (10 no match,
+#                        11 unavailable, 12 provision failure), printing the real CLI's message
+#   FAKE_ADI_LG_DELAY    seconds to sleep before the "boot" completes (default 0)
+#   FAKE_ADI_LG_URI      IIO_URI to export (default ip:127.0.0.1)
+#   FAKE_ADI_LG_PLACE    LG_PLACE to export (default fake-place)
+#   FAKE_ADI_LG_CARRIER  carrier when --carrier is not given (default zc706)
+#   FAKE_ADI_LG_LOG      append the full argument list to this file
+set -u
+[ -n "${FAKE_ADI_LG_LOG:-}" ] && printf '%s\n' "$*" >> "$FAKE_ADI_LG_LOG"
+
+cmd=${1:-}; shift || true
+if [ "$cmd" != "request" ]; then
+  echo "fake adi-lg: unsupported command '$cmd'" >&2
+  exit 2
+fi
+part=""; carrier=""; run=""; mode="uri"
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --part) part=$2; shift 2 ;;
+    --carrier) carrier=$2; shift 2 ;;
+    --mode) mode=$2; shift 2 ;;
+    --wait|--coord|--bootfile) shift 2 ;;
+    --power-down|--no-boot) shift ;;
+    --run) run=$2; shift 2 ;;
+    *) echo "fake adi-lg: unknown option $1" >&2; exit 2 ;;
+  esac
+done
+[ -n "$part" ] || { echo "Error: Missing option '--part'." >&2; exit 2; }
+
+case "${FAKE_ADI_LG_EXIT:-}" in
+  "") ;;
+  10) echo "No matching board: no live place for '$part'" >&2; exit 10 ;;
+  11) echo "Board unavailable: all '$part' places are busy" >&2; exit 11 ;;
+  12) echo "Provisioning failed: boot verification failed for $part" >&2; exit 12 ;;
+  *)  echo "fake adi-lg: forced exit ${FAKE_ADI_LG_EXIT}" >&2; exit "${FAKE_ADI_LG_EXIT}" ;;
+esac
+
+sleep "${FAKE_ADI_LG_DELAY:-0}"
+uri=${FAKE_ADI_LG_URI:-ip:127.0.0.1}
+place=${FAKE_ADI_LG_PLACE:-fake-place}
+carrier=${carrier:-${FAKE_ADI_LG_CARRIER:-zc706}}
+
+if [ -z "$run" ]; then
+  echo "$uri"
+  exit 0
+fi
+echo "Booted $place -> $uri"
+export IIO_URI=$uri LG_PLACE=$place LG_CARRIER=$carrier HW_DAUGHTER=$part HW_CARRIER=$carrier
+[ "$mode" = "reserve" ] && export LG_ENV=/tmp/fake-adi-lg-env.yaml
+
+child=""
+on_term() {
+  if [ -n "$child" ]; then
+    kill -TERM "$child" 2>/dev/null
+    wait "$child" 2>/dev/null
+  fi
+  echo "Interrupted — board released" >&2
+  exit 130
+}
+trap on_term TERM INT
+bash -c "$run" &
+child=$!
+wait "$child"
+rc=$?
+echo "Released $place" >&2
+exit $rc
