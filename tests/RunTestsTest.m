@@ -12,7 +12,83 @@ classdef RunTestsTest < matlab.unittest.TestCase
         end
     end
 
+    methods (Access = private)
+        function client = clientMatchingOnly(testCase, parts)
+            % A Client whose /match says "satisfiable" only for the given parts.
+            rec = fullfile(helpers.repoRoot(), "tests", "recorded");
+            function [s, b] = transport(url)
+                s = 200;
+                part = extractBetween(string(url), "part=", optionalPattern("&" + wildcardPattern) + textBoundary("end"));
+                if any(part == parts)
+                    b = string(fileread(fullfile(rec, "match_satisfiable.json")));
+                else
+                    b = string(fileread(fullfile(rec, "match_unsatisfiable.json")));
+                end
+            end
+            client = labgrid.Client(BaseURL="http://x/api", Transport=@transport);
+            testCase.addTeardown(@() []);
+        end
+    end
+
     methods (Test)
+        % --- FilterByAvailability ------------------------------------------------------
+        function availabilityFilterDropsTestsWhoseBoardHasNoLiveMatch(testCase)
+            helpers.withLeaseEnv(testCase, "IIO_URI", "ip:10.0.0.132", "HW_DAUGHTER", "adrv9371");
+            results = labgrid.runTests(["helpers.BoardConsumerTests", "helpers.OtherBoardConsumerTests", "helpers.PlainTests"], ...
+                FilterByAvailability=true, Client=testCase.clientMatchingOnly("adrv9371"), ...
+                JUnit=fullfile(testCase.Dir, "j.xml"), Summary=fullfile(testCase.Dir, "s.json"), Verbosity=0);
+            names = string({results.Name});
+            testCase.verifyNumElements(results, 4);
+            testCase.verifyFalse(any(contains(names, "OtherBoardConsumerTests")));
+            testCase.verifyTrue(any(contains(names, "PlainTests")), "tests without a board fixture are kept");
+        end
+
+        function availabilityFilterKeepsEverythingWhenAllBoardsMatch(testCase)
+            helpers.withLeaseEnv(testCase, "IIO_URI", "ip:10.0.0.132");
+            results = labgrid.runTests(["helpers.BoardConsumerTests", "helpers.OtherBoardConsumerTests"], ...
+                FilterByAvailability=true, Client=testCase.clientMatchingOnly(["adrv9371", "ad9081"]), ...
+                JUnit=fullfile(testCase.Dir, "j.xml"), Summary=fullfile(testCase.Dir, "s.json"), Verbosity=0);
+            testCase.verifyNumElements(results, 3);
+        end
+
+        function availabilityFilterRecordsSkippedBoardsInSummary(testCase)
+            helpers.withLeaseEnv(testCase, "IIO_URI", "ip:10.0.0.132");
+            summary = fullfile(testCase.Dir, "s.json");
+            labgrid.runTests(["helpers.BoardConsumerTests", "helpers.OtherBoardConsumerTests"], ...
+                FilterByAvailability=true, Client=testCase.clientMatchingOnly("adrv9371"), ...
+                JUnit=fullfile(testCase.Dir, "j.xml"), Summary=summary, Verbosity=0);
+            s = jsondecode(fileread(summary));
+            testCase.verifyNumElements(s.skipped, 1);
+            testCase.verifyEqual(string(s.skipped(1).part), "ad9081");
+            testCase.verifyEqual(string(s.skipped(1).carrier), "zcu102");
+            testCase.verifyEqual(s.skipped(1).tests, 1);
+            testCase.verifySubstring(string(s.skipped(1).reason), "no live place");
+        end
+
+        function availabilityFilterQueriesEachBoardOnce(testCase)
+            helpers.withLeaseEnv(testCase, "IIO_URI", "ip:10.0.0.132");
+            urls = {};
+            function [s, b] = transport(url)
+                urls{end+1} = string(url); %#ok<AGROW>
+                s = 200; b = string(fileread(fullfile(helpers.repoRoot(), "tests", "recorded", "match_satisfiable.json")));
+            end
+            client = labgrid.Client(BaseURL="http://x/api", Transport=@transport);
+            labgrid.runTests(["helpers.BoardConsumerTests", "helpers.OtherBoardConsumerTests", "helpers.PlainTests"], ...
+                FilterByAvailability=true, Client=client, ...
+                JUnit=fullfile(testCase.Dir, "j.xml"), Summary=fullfile(testCase.Dir, "s.json"), Verbosity=0);
+            testCase.verifyEqual(sort(string(urls)), sort(["http://x/api/match?part=ad9081&carrier=zcu102", ...
+                "http://x/api/match?part=adrv9371"]));
+        end
+
+        function availabilityFilterSurfacesAnUnreachableCoordinator(testCase)
+            helpers.withLeaseEnv(testCase);
+            client = labgrid.Client(BaseURL="http://x/api", Transport=@(url) error("boom:boom", "no route"));
+            testCase.verifyError(@() labgrid.runTests("helpers.BoardConsumerTests", FilterByAvailability=true, Client=client, ...
+                JUnit=fullfile(testCase.Dir, "j.xml"), Summary=fullfile(testCase.Dir, "s.json"), Verbosity=0), ...
+                "labgrid:coordinatorUnreachable");
+        end
+
+        % --- basics --------------------------------------------------------------------
         function writesJUnitAndSummary(testCase)
             helpers.withLeaseEnv(testCase, "IIO_URI", "ip:10.0.0.132", "LG_PLACE", "bq", ...
                 "LG_CARRIER", "zc706", "HW_DAUGHTER", "adrv9371");
