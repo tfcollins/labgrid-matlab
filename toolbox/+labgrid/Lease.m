@@ -68,12 +68,7 @@ classdef Lease
                 obj
                 name (1,1) string
             end
-            key = matlab.lang.makeValidName(char(name));
-            if isfield(obj.Tags, key)
-                v = string(obj.Tags.(key));
-            else
-                v = "";
-            end
+            v = labgrid.internal.tagValue(obj.Tags, name);
         end
 
         function env = toEnvironment(obj)
