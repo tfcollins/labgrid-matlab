@@ -4,8 +4,8 @@ function results = runTests(target, opts)
 %   results = labgrid.runTests(target, Name=Value)
 %
 %   target   anything testsuite() accepts (folder, class name(s), package) or a TestSuite.
-%   Part     only run tests whose BoardFixture asks for this part (via HasSharedTestFixture).
-%   Carrier  carrier to pair with Part when selecting.
+%   Part     only run tests whose BoardFixture asks for this part.
+%   Carrier  narrow Part to this carrier; when empty, fixtures declaring any carrier match.
 %   Tags     keep only tests carrying all of these TestTags.
 %   JUnit    JUnit XML output path (default "labgrid-junit.xml").
 %   Summary  JSON summary path (default "labgrid-summary.json"): total/passed/failed/incomplete,
@@ -41,11 +41,16 @@ else
     suite = testsuite(target);
 end
 if strlength(opts.Part) > 0
-    suite = suite.selectIf(HasSharedTestFixture( ...
-        labgrid.fixtures.BoardFixture(opts.Part, Carrier=opts.Carrier)));
+    keep = arrayfun(@(t) needsBoard(t, opts.Part, opts.Carrier), suite);
+    suite = suite(keep);
 end
 for t = opts.Tags(:)'
     suite = suite.selectIf(HasTag(t));
+end
+if isempty(suite)
+    warning("labgrid:emptySelection", ...
+        "No tests selected (Part=""%s"", Carrier=""%s"", Tags=%s); the summary will report 0 tests.", ...
+        opts.Part, opts.Carrier, jsonencode(opts.Tags));
 end
 
 skipped = struct("part", {}, "carrier", {}, "tests", {}, "reason", {});
@@ -82,10 +87,7 @@ runner.addPlugin(XMLPlugin.producingJUnitFormat(opts.JUnit));
 
 results = runner.run(suite);
 
-lease = labgrid.Lease.fromEnvironment();
-if isempty(lease)
-    lease = labgrid.Lease();
-end
+lease = leaseUsedBy(results);
 summary = struct( ...
     "total", numel(results), ...
     "passed", nnz([results.Passed]), ...
@@ -95,8 +97,38 @@ summary = struct( ...
     "place", lease.Place, "uri", lease.URI, "daughter", lease.Daughter, "carrier", lease.Carrier, ...
     "coordinator", string(getenv(labgrid.config.EnvCoordinator)), ...
     "junit", opts.JUnit, ...
-    "skipped", skipped);
+    "skipped", {num2cell(skipped)});   % cell -> always a JSON array, even for one entry (outer {} keeps struct() scalar)
 writelines(jsonencode(summary, PrettyPrint=true), opts.Summary);
+end
+
+function tf = needsBoard(test, part, carrier)
+% True when one of the test's BoardFixtures asks for part (and carrier, when given).
+tf = false;
+for f = test.SharedTestFixtures
+    if isa(f, "labgrid.fixtures.BoardFixture") && f.Part == part ...
+            && (strlength(carrier) == 0 || f.Carrier == carrier)
+        tf = true;
+        return
+    end
+end
+end
+
+function lease = leaseUsedBy(results)
+% The board the run used: from the first result the LabgridPlugin annotated (the fixture's
+% env export is already restored by now), else the environment hand-over, else empty.
+lease = labgrid.Lease();
+for r = results(:)'
+    if isfield(r.Details, "labgrid")
+        d = r.Details.labgrid(1);
+        lease = labgrid.Lease(URI=string(d.uri), Place=string(d.place), Carrier=string(d.carrier), ...
+            Daughter=string(d.daughter), Source=string(d.source));
+        return
+    end
+end
+env = labgrid.Lease.fromEnvironment();
+if ~isempty(env)
+    lease = env;
+end
 end
 
 function fixtures = boardFixturesIn(suite)

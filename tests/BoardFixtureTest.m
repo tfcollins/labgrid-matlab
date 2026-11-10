@@ -96,6 +96,19 @@ classdef BoardFixtureTest < matlab.unittest.TestCase
             testCase.verifyFalse(any([results.Failed]), "mismatch must not be red");
         end
 
+        function envLeaseWithDifferentCarrierMarksTestsIncomplete(testCase)
+            helpers.withLeaseEnv(testCase, "IIO_URI", "ip:10.0.0.132", "HW_DAUGHTER", "ad9081", "LG_CARRIER", "zcu111");
+            results = runtests("helpers.OtherBoardConsumerTests");   % wants ad9081 on zcu102
+            testCase.verifyTrue(all([results.Incomplete]));
+            testCase.verifyFalse(any([results.Failed]));
+        end
+
+        function envLeaseWithMatchingCarrierIsUsed(testCase)
+            helpers.withLeaseEnv(testCase, "IIO_URI", "ip:10.0.0.132", "HW_DAUGHTER", "ad9081", "LG_CARRIER", "zcu102");
+            results = runtests("helpers.OtherBoardConsumerTests");
+            testCase.verifyTrue(all([results.Passed]));
+        end
+
         function envLeaseWithoutPartTagSatisfiesAnyFixture(testCase)
             helpers.withLeaseEnv(testCase, "IIO_URI", "ip:10.0.0.132", "LG_CARRIER", "zc706");
             results = runtests("helpers.BoardConsumerTests");

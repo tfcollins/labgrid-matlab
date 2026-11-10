@@ -88,6 +88,65 @@ classdef RunTestsTest < matlab.unittest.TestCase
                 "labgrid:coordinatorUnreachable");
         end
 
+        function skippedIsAlwaysAJsonArrayEvenForOneBoard(testCase)
+            helpers.withLeaseEnv(testCase, "IIO_URI", "ip:10.0.0.132");
+            summary = fullfile(testCase.Dir, "s.json");
+            labgrid.runTests(["helpers.BoardConsumerTests", "helpers.OtherBoardConsumerTests"], ...
+                FilterByAvailability=true, Client=testCase.clientMatchingOnly("adrv9371"), ...
+                JUnit=fullfile(testCase.Dir, "j.xml"), Summary=summary, Verbosity=0);
+            txt = string(fileread(summary));
+            testCase.verifyMatches(txt, '"skipped":\s*\[', "one skipped board must still be a JSON array");
+            labgrid.runTests("helpers.PlainTests", JUnit=fullfile(testCase.Dir, "j.xml"), Summary=summary, Verbosity=0);
+            testCase.verifyMatches(string(fileread(summary)), '"skipped":\s*\[\s*\]');
+        end
+
+        function summaryRecordsTheBoardUsedOnTheSessionPath(testCase)
+            % The fixture's env export is gone by the time the summary is written; the board
+            % must come from the per-result details the plugin recorded.
+            import matlab.unittest.fixtures.EnvironmentVariableFixture
+            testCase.assumeTrue(isunix, "bash only");
+            helpers.withLeaseEnv(testCase);
+            shim = fullfile(helpers.repoRoot(), "tests", "+fakes", "bin", "adi-lg");
+            testCase.applyFixture(EnvironmentVariableFixture("LG_ADI_LG_BIN", shim));
+            testCase.applyFixture(EnvironmentVariableFixture("LG_MATLAB_HOME", fullfile(testCase.Dir, "home")));
+            testCase.applyFixture(EnvironmentVariableFixture("LG_COORDINATOR", "coord:20408"));
+            testCase.applyFixture(EnvironmentVariableFixture("FAKE_ADI_LG_URI", "ip:10.0.0.132"));
+            testCase.applyFixture(EnvironmentVariableFixture("FAKE_ADI_LG_PLACE", "real-place"));
+            testCase.applyFixture(EnvironmentVariableFixture("FAKE_ADI_LG_EXIT", ""));
+            summary = fullfile(testCase.Dir, "s.json");
+            results = labgrid.runTests("helpers.BoardConsumerTests", JUnit=fullfile(testCase.Dir, "j.xml"), ...
+                Summary=summary, Verbosity=0);
+            testCase.assertTrue(all([results.Passed]));
+            s = jsondecode(fileread(summary));
+            testCase.verifyEqual(string(s.place), "real-place");
+            testCase.verifyEqual(string(s.uri), "ip:10.0.0.132");
+            testCase.verifyEqual(string(s.daughter), "adrv9371");
+            testCase.verifyEqual(string(results(1).Details.labgrid.place), "real-place");
+        end
+
+        % --- Part selection -------------------------------------------------------------
+        function partWithoutCarrierMatchesFixturesThatDeclareACarrier(testCase)
+            helpers.withLeaseEnv(testCase, "IIO_URI", "ip:10.0.0.132", "HW_DAUGHTER", "ad9081");
+            results = labgrid.runTests(["helpers.BoardConsumerTests", "helpers.OtherBoardConsumerTests"], ...
+                Part="ad9081", JUnit=fullfile(testCase.Dir, "j.xml"), Summary=fullfile(testCase.Dir, "s.json"), Verbosity=0);
+            testCase.verifyNumElements(results, 1);
+            testCase.verifySubstring(results(1).Name, "OtherBoardConsumerTests");
+        end
+
+        function partWithCarrierStillNarrowsByCarrier(testCase)
+            helpers.withLeaseEnv(testCase, "IIO_URI", "ip:10.0.0.132", "HW_DAUGHTER", "ad9081");
+            results = labgrid.runTests("helpers.OtherBoardConsumerTests", Part="ad9081", Carrier="zc706", ...
+                JUnit=fullfile(testCase.Dir, "j.xml"), Summary=fullfile(testCase.Dir, "s.json"), Verbosity=0);
+            testCase.verifyEmpty(results);
+        end
+
+        function emptySelectionWarns(testCase)
+            helpers.withLeaseEnv(testCase);
+            testCase.verifyWarning(@() labgrid.runTests("helpers.PlainTests", Part="nosuchpart", ...
+                JUnit=fullfile(testCase.Dir, "j.xml"), Summary=fullfile(testCase.Dir, "s.json"), Verbosity=0), ...
+                "labgrid:emptySelection");
+        end
+
         % --- basics --------------------------------------------------------------------
         function writesJUnitAndSummary(testCase)
             helpers.withLeaseEnv(testCase, "IIO_URI", "ip:10.0.0.132", "LG_PLACE", "bq", ...
