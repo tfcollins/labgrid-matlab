@@ -105,13 +105,18 @@ CI form. `runInParallel` is not supported (each worker would request its own boa
 ## Verified
 
 2026-11-09, MATLAB R2025b on lab host nemo against coordinator 10.0.0.41 (labgrid-plugins at
-3bfc181, labgrid 26.0.1): `buildtool test` 105/105 (no hardware); `buildtool testLive` booted
-place `nemo` (adrv9009 on zc706, BootFPGASoCTFTP) through `labgrid.Session.request` and again
-through `labgrid.fixtures.BoardFixture`, reached iiod at `ip:10.0.3.1:30431`, and released the
-place on the coordinator both times. Note: the `adi-lg` used must be at least as new as the
-lab's exporters (older venvs failed with "'XilinxDeviceJTAGAttributes' object has no attribute
-'serial'", which surfaces as `labgrid:provisionFailed` with the log tail, and the place is still
-released).
+3bfc181, labgrid 26.0.1):
+
+- `buildtool test`: 105/105 unit tests, no hardware.
+- `buildtool testLive`: place `nemo` (adrv9009 on zc706, BootFPGASoCTFTP) booted through
+  `labgrid.Session.request` and, in a separate run, through `labgrid.fixtures.BoardFixture`;
+  iiod reached at `ip:10.0.3.1:30431`; the summary JSON named the board; the place was released
+  on the coordinator after each run.
+- Two boots back-to-back on the same host can hit labgrid's managed TFTP server port before it
+  is freed (`OSError 98 Address already in use` from `adi-lg`, surfaced as
+  `labgrid:provisionFailed`); the place is still released. Space consecutive boots out.
+- The `adi-lg` used must be at least as new as the lab's exporters: older venvs failed with
+  "'XilinxDeviceJTAGAttributes' object has no attribute 'serial'".
 
 ## Development
 
